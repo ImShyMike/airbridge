@@ -1,31 +1,3 @@
-// safety:
-//
-// A user-sent filterByFormula is evaluated by Airtable against the FULL record
-// (every column), and whether a row matches (observable through the result count)
-// leaks NON-allowlisted columns one bit at a time (ex: {Secret} < "m"). A function
-// denylist can never stop this, because the oracle is built from <, =, &, which
-// are required for legitimate filtering and so can never be banned.
-//
-// So instead of inspecting the caller's string, we PARSE it into a syntax tree,
-// reject anything outside the caller's read-allowlist, and RE-SERIALIZE our own
-// validated tree. The string we send to Airtable is one WE generated from nodes we
-// checked, never the caller's raw input. A formula can therefore only ever filter or
-// sort on fields the caller could already read. The guarantee relies on four conditions
-//
-//   1. Every field reference must resolve to an allowlisted field, and we write the
-//      canonical allowlisted name, so case tricks and look-alike characters cannot
-//      slip in a different column.
-//   2. Every function must be in ALLOWED_FUNCTIONS (logic and comparison only, never
-//      text extractors, regex, or metadata/time functions that expose record data
-//      with no field argument).
-//   3. String values may not contain a backslash or a double-quote, so the value we
-//      write back can never be closed early or escaped, and no string can break out
-//      into code, independent of Airtable's exact escaping rules.
-//   4. The parser must consume the entire input; leftover tokens are rejected so we
-//      never silently drop part of a formula.
-//
-// sanitizeSelect applies the same treatment to the whole select. sort is a second
-// oracle method and is field-checked too, and unknown keys (view and similar) are dropped.
 
 function badRequest(message) {
   const error = new Error("Invalid filterByFormula: " + message)
