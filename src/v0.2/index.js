@@ -2,7 +2,7 @@ const PUBLIC_AUTH_KEY = "recsxFPWtS57ipww81611873047g41m8dw1t8p" // publicly ava
 
 import Airtable from "airtable"
 import express from "express"
-import { ensureFormulaSafe } from "../shared/formula.js"
+import { sanitizeSelect } from "../shared/formula.js"
 import { getPermissions } from "./permissions"
 import { logRequest } from "../shared/logging.js"
 import { rateLimitMiddleware } from "../shared/rateLimiter.js"
@@ -20,20 +20,6 @@ router.use(async (req, res, next) => {
     params: { ...req.params },
     query: { ...req.query },
     body: req.body,
-  }
-
-  if (req.query.select) {
-    try {
-      const select = JSON.parse(req.query.select)
-      if (select.filterByFormula) {
-        ensureFormulaSafe(select.filterByFormula)
-      }
-    } catch (err) {
-      if (err.statusCode === 400) {
-        return next(err)
-      }
-      // Ignore JSON parse errors here, let the route handler deal with them if needed
-    }
   }
 
   if (req.query.authKey) {
@@ -62,7 +48,7 @@ router.get(
   rateLimitMiddleware,
   async (req, res, next) => {
     const basePermission = Object.keys(res.locals.permissions).includes(
-      req.params.base
+      req.params.base,
     )
     if (!basePermission) {
       const error = new Error("Base not found or permissions insufficient")
@@ -71,7 +57,7 @@ router.get(
     }
 
     const tablePermission = Object.keys(
-      res.locals.permissions[req.params.base]
+      res.locals.permissions[req.params.base],
     ).includes(req.params.tableName)
     if (!tablePermission) {
       const error = new Error("Table not found or permissions insufficient")
@@ -81,14 +67,14 @@ router.get(
     const permittedFields =
       res.locals.permissions[req.params.base][req.params.tableName].get
     const unpermittedFields = Object.keys(req.body).filter(
-      (field) => !permittedFields.includes(field)
+      (field) => !permittedFields.includes(field),
     )
     const fieldPermission = unpermittedFields.length === 0
     if (!fieldPermission) {
       const error = new Error(
         `Field(s) ${unpermittedFields
           .map((f) => `'${f}'`)
-          .join(", ")} doesn't exist or permissions insufficient`
+          .join(", ")} doesn't exist or permissions insufficient`,
       )
       error.statusCode = 422
       return next(error)
@@ -98,11 +84,22 @@ router.get(
     const ab = res.locals.permissions[req.params.base].baseID
     const at = req.params.tableName
     const airinst = new Airtable({ apiKey: process.env.AIRTABLE_API_KEY }).base(
-      ab
+      ab,
     )(at)
+    if (!/^rec[A-Za-z0-9]{14}$/.test(req.params.recordID)) {
+      const error = new Error("Invalid record ID")
+      error.statusCode = 400
+      return next(error)
+    }
     let select = {}
-    if (req.query.select) {
-      select = JSON.parse(req.query.select)
+    try {
+      if (req.query.select) {
+        select = JSON.parse(req.query.select)
+      }
+      select = sanitizeSelect(select, permittedFields)
+    } catch (err) {
+      err.statusCode = err.statusCode || 400
+      return next(err)
     }
     select.filterByFormula = `RECORD_ID()='${req.params.recordID}'`
     select.maxRecords = 1
@@ -123,7 +120,7 @@ router.get(
 
     res.locals.response = results[0]
     respond(null, req, res, next)
-  }
+  },
 )
 
 router.get(
@@ -132,7 +129,7 @@ router.get(
   logRequest,
   async (req, res, next) => {
     const basePermission = Object.keys(res.locals.permissions).includes(
-      req.params.base
+      req.params.base,
     )
     if (!basePermission) {
       const error = new Error("Base not found or permissions insufficient")
@@ -141,7 +138,7 @@ router.get(
     }
 
     const tablePermission = Object.keys(
-      res.locals.permissions[req.params.base]
+      res.locals.permissions[req.params.base],
     ).includes(req.params.tableName)
     if (!tablePermission) {
       const error = new Error("Table not found or permissions insufficient")
@@ -151,14 +148,14 @@ router.get(
     const permittedFields =
       res.locals.permissions[req.params.base][req.params.tableName].get
     const unpermittedFields = Object.keys(req.body).filter(
-      (field) => !permittedFields.includes(field)
+      (field) => !permittedFields.includes(field),
     )
     const fieldPermission = unpermittedFields.length === 0
     if (!fieldPermission) {
       const error = new Error(
         `Field(s) ${unpermittedFields
           .map((f) => `'${f}'`)
-          .join(", ")} doesn't exist or permissions insufficient`
+          .join(", ")} doesn't exist or permissions insufficient`,
       )
       error.statusCode = 422
       return next(error)
@@ -168,11 +165,17 @@ router.get(
     const ab = res.locals.permissions[req.params.base].baseID
     const at = req.params.tableName
     const airinst = new Airtable({ apiKey: process.env.AIRTABLE_API_KEY }).base(
-      ab
+      ab,
     )(at)
     let select = {}
-    if (req.query.select) {
-      select = JSON.parse(req.query.select)
+    try {
+      if (req.query.select) {
+        select = JSON.parse(req.query.select)
+      }
+      select = sanitizeSelect(select, permittedFields)
+    } catch (err) {
+      err.statusCode = err.statusCode || 400
+      return next(err)
     }
     const rawResults = await airinst
       .select(select)
@@ -191,7 +194,7 @@ router.get(
 
     res.locals.response = results
     respond(null, req, res, next)
-  }
+  },
 )
 
 router.post(
@@ -199,7 +202,7 @@ router.post(
   rateLimitMiddleware,
   async (req, res, next) => {
     const basePermission = Object.keys(res.locals.permissions).includes(
-      req.params.base
+      req.params.base,
     )
     if (!basePermission) {
       const error = new Error("Base not found or permissions insufficient")
@@ -207,7 +210,7 @@ router.post(
       return next(error)
     }
     const tablePermission = Object.keys(
-      res.locals.permissions[req.params.base]
+      res.locals.permissions[req.params.base],
     ).includes(req.params.tableName)
     if (!tablePermission) {
       const error = new Error("Table not found or permissions insufficient")
@@ -218,14 +221,14 @@ router.post(
       (field) =>
         !res.locals.permissions[req.params.base][
           req.params.tableName
-        ].post.includes(field)
+        ].post.includes(field),
     )
     const fieldPermission = unpermittedFields.length === 0
     if (!fieldPermission) {
       const error = new Error(
         `Field(s) ${unpermittedFields
           .map((f) => `'${f}'`)
-          .join(", ")} doesn't exist or permissions insufficient`
+          .join(", ")} doesn't exist or permissions insufficient`,
       )
       error.statusCode = 422
       return next(error)
@@ -234,7 +237,7 @@ router.post(
     // we have permission to use the table, pull the info & leave
     if (!req.query.airtableKey) {
       const error = new Error(
-        "airtableKey query param required for write operations"
+        "airtableKey query param required for write operations",
       )
       error.statusCode = 401
       return next(error)
@@ -272,7 +275,7 @@ router.post(
     }
 
     respond(null, req, res, next)
-  }
+  },
 )
 
 router.patch(
@@ -280,7 +283,7 @@ router.patch(
   rateLimitMiddleware,
   async (req, res, next) => {
     const basePermission = Object.keys(res.locals.permissions).includes(
-      req.params.base
+      req.params.base,
     )
     if (!basePermission) {
       const error = new Error("Base not found or permissions insufficient")
@@ -288,7 +291,7 @@ router.patch(
       return next(error)
     }
     const tablePermission = Object.keys(
-      res.locals.permissions[req.params.base]
+      res.locals.permissions[req.params.base],
     ).includes(req.params.tableName)
     if (!tablePermission) {
       const error = new Error("Table not found or permissions insufficient")
@@ -313,13 +316,13 @@ router.patch(
     for (const record of bodyArray) {
       const fieldKeys = Object.keys(record).filter((k) => k !== "id")
       const unpermittedFields = fieldKeys.filter(
-        (field) => !patchPermissions.includes(field)
+        (field) => !patchPermissions.includes(field),
       )
       if (unpermittedFields.length > 0) {
         const error = new Error(
           `Field(s) ${unpermittedFields
             .map((f) => `'${f}'`)
-            .join(", ")} doesn't exist or permissions insufficient`
+            .join(", ")} doesn't exist or permissions insufficient`,
         )
         error.statusCode = 422
         return next(error)
@@ -329,13 +332,13 @@ router.patch(
     // validate merge fields are in the permitted list
     if (fieldsToMergeOn) {
       const unpermittedMerge = fieldsToMergeOn.filter(
-        (field) => !patchPermissions.includes(field)
+        (field) => !patchPermissions.includes(field),
       )
       if (unpermittedMerge.length > 0) {
         const error = new Error(
           `Merge field(s) ${unpermittedMerge
             .map((f) => `'${f}'`)
-            .join(", ")} not permitted`
+            .join(", ")} not permitted`,
         )
         error.statusCode = 422
         return next(error)
@@ -344,7 +347,7 @@ router.patch(
 
     if (!req.query.airtableKey) {
       const error = new Error(
-        "airtableKey query param required for write operations"
+        "airtableKey query param required for write operations",
       )
       error.statusCode = 401
       return next(error)
@@ -363,9 +366,9 @@ router.patch(
       if (!id) {
         throw Object.assign(
           new Error(
-            "Each record must include 'id' unless using fieldsToMergeOn for upsert"
+            "Each record must include 'id' unless using fieldsToMergeOn for upsert",
           ),
-          { statusCode: 422 }
+          { statusCode: 422 },
         )
       }
       return { id, fields }
@@ -388,7 +391,7 @@ router.patch(
     const readPermissions =
       res.locals.permissions[req.params.base][req.params.tableName]?.get || []
     const allowedFields = Array.from(
-      new Set([...readPermissions, ...patchPermissions])
+      new Set([...readPermissions, ...patchPermissions]),
     )
     const results = rawResultArray.map((rec) => {
       const result = { id: rec.id, fields: {} }
@@ -405,7 +408,7 @@ router.patch(
     }
 
     respond(null, req, res, next)
-  }
+  },
 )
 
 router.get("/test", async (req, res, next) => {

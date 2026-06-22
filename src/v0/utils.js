@@ -1,6 +1,6 @@
 import Airtable from "airtable"
 import { allowlistBaseTable, allowlistRecords, baseInfo } from "./allowlist"
-import { ensureFormulaSafe } from "../shared/formula.js"
+import { sanitizeSelect } from "../shared/formula.js"
 
 export function lookupBaseID(baseID) {
   const lookedUpID = baseInfo[baseID]
@@ -9,10 +9,6 @@ export function lookupBaseID(baseID) {
 
 export async function airtableLookup(options, auth) {
   const { base, tableName, select } = options
-
-  if (select?.filterByFormula) {
-    ensureFormulaSafe(select.filterByFormula)
-  }
 
   const baseID = lookupBaseID(base)
 
@@ -33,13 +29,14 @@ export async function airtableLookup(options, auth) {
       resultFields = allowlistedFields
     }
 
+    const safeSelect = sanitizeSelect(select || {}, allowlistedFields)
+    safeSelect.fields = resultFields
+
     const airinst = new Airtable({ apiKey: process.env.AIRTABLE_API_KEY }).base(
-      baseID
+      baseID,
     )(tableName)
 
-    const rawResults = await airinst
-      .select({ ...select, fields: resultFields })
-      .all()
+    const rawResults = await airinst.select(safeSelect).all()
 
     return allowlistRecords(rawResults, resultFields)
   }

@@ -2,7 +2,6 @@ import express from "express"
 const router = express.Router()
 const env = process.env.NODE_ENV || "development"
 import { airtableLookup } from "./utils"
-import { ensureFormulaSafe } from "../shared/formula.js"
 import { rateLimitMiddleware } from "../shared/rateLimiter.js"
 
 router.get(
@@ -45,9 +44,6 @@ router.get(
       }
       if (req.query.select) {
         options.select = JSON.parse(req.query.select)
-        if (options.select.filterByFormula) {
-          ensureFormulaSafe(options.select.filterByFormula)
-        }
       }
       const result = await airtableLookup(options, providedAuth)
 
@@ -71,7 +67,7 @@ router.get(
         meta,
       })
     }
-  }
+  },
 )
 router.get("/:base/:tableName", rateLimitMiddleware, async (req, res, next) => {
   /*
@@ -108,9 +104,6 @@ router.get("/:base/:tableName", rateLimitMiddleware, async (req, res, next) => {
     }
     if (req.query.select) {
       options.select = JSON.parse(req.query.select)
-      if (options.select.filterByFormula) {
-        ensureFormulaSafe(options.select.filterByFormula)
-      }
     }
     const result = await airtableLookup(options, providedAuth)
 

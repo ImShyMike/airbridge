@@ -3,12 +3,12 @@ import friendlyWords from "friendly-words"
 import yaml from "js-yaml"
 import path from "path"
 import fs from "fs"
-import { ensureFormulaSafe } from "../shared/formula.js"
+import { sanitizeSelect } from "../shared/formula.js"
 
 const allowlist = (() => {
   try {
     const doc = yaml.load(
-      fs.readFileSync(path.resolve(__dirname, "./airtable-info.yml"), "utf8")
+      fs.readFileSync(path.resolve(__dirname, "./airtable-info.yml"), "utf8"),
     )
     return doc
   } catch (e) {
@@ -36,7 +36,7 @@ function allowlistBaseTable(baseID, tableName) {
   const baseInAllowlist = lookupBase(baseID)
   if (!baseInAllowlist) {
     const err = new Error(
-      "Not found: base either doesn't exist or isn't publicly accessible"
+      "Not found: base either doesn't exist or isn't publicly accessible",
     )
     err.statusCode = 404
     throw err
@@ -47,7 +47,7 @@ function allowlistBaseTable(baseID, tableName) {
   const tableInAllowlist = lookupTable(baseInAllowlist, tableName)
   if (!tableInAllowlist) {
     const err = new Error(
-      "Not found: table either doesn't exist or isn't publicly accessible"
+      "Not found: table either doesn't exist or isn't publicly accessible",
     )
     err.statusCode = 404
     throw err
@@ -68,7 +68,7 @@ function allowlistedRecords(records, allowlistedFields) {
     }
 
     allowlistedFields.forEach(
-      (field) => (result.fields[field] = record.fields[field])
+      (field) => (result.fields[field] = record.fields[field]),
     )
     return result
   }
@@ -76,10 +76,6 @@ function allowlistedRecords(records, allowlistedFields) {
 
 export async function airtableLookup(options, auth) {
   const { base, tableName, select } = options
-
-  if (select?.filterByFormula) {
-    ensureFormulaSafe(select.filterByFormula)
-  }
 
   const baseID = lookupBaseID(base)
 
@@ -100,13 +96,14 @@ export async function airtableLookup(options, auth) {
       resultFields = allowlistedFields
     }
 
+    const safeSelect = sanitizeSelect(select || {}, allowlistedFields)
+    safeSelect.fields = resultFields
+
     const airinst = new Airtable({ apiKey: process.env.AIRTABLE_API_KEY }).base(
-      baseID
+      baseID,
     )(tableName)
 
-    const rawResults = await airinst
-      .select({ ...select, fields: resultFields })
-      .all()
+    const rawResults = await airinst.select(safeSelect).all()
 
     return allowlistedRecords(rawResults, resultFields)
   }
@@ -133,7 +130,7 @@ export async function airtableUpdate(options, auth) {
     })
   } else {
     const err = new Error(
-      "Unable to complete request: patching requires authentication"
+      "Unable to complete request: patching requires authentication",
     )
     err.statusCode = 401
     throw err
@@ -157,7 +154,7 @@ export async function airtableCreate(options, auth) {
     })
   } else {
     const err = new Error(
-      "Unable to complete request: posting requires authentication"
+      "Unable to complete request: posting requires authentication",
     )
     err.statusCode = 401
     throw err
@@ -185,7 +182,7 @@ export async function fileToTempURL(blob, name = randomName()) {
       method: "POST",
       mode: "cors",
       body: formData,
-    }
+    },
   )
 
   if (response.headers) {

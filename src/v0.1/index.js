@@ -3,7 +3,6 @@ import NodeCache from "node-cache"
 import express from "express"
 import { logRequest } from "../shared/logging.js"
 import { rateLimitMiddleware } from "../shared/rateLimiter.js"
-import { ensureFormulaSafe } from "../shared/formula.js"
 const router = express.Router()
 const cache = new NodeCache()
 
@@ -93,7 +92,7 @@ router.post(
     } catch (err) {
       respond(err, req, res, next)
     }
-  }
+  },
 )
 
 router.patch(
@@ -111,28 +110,12 @@ router.patch(
     } catch (err) {
       respond(err, req, res, next)
     }
-  }
+  },
 )
 
 router.get(
   "/:base/:tableName",
   rateLimitMiddleware,
-  (req, res, next) => {
-    if (req.query.select) {
-      try {
-        const select = JSON.parse(req.query.select)
-        if (select.filterByFormula) {
-          ensureFormulaSafe(select.filterByFormula)
-        }
-      } catch (err) {
-        if (err.statusCode) {
-          respond(err, req, res, () => {})
-          return
-        }
-      }
-    }
-    next()
-  },
   logRequest,
   async (req, res, next) => {
     const options = {
@@ -143,7 +126,8 @@ router.get(
       try {
         options.select = JSON.parse(req.query.select)
       } catch (err) {
-        respond(err, req, res, next)
+        err.statusCode = err.statusCode || 400
+        return respond(err, req, res, next)
       }
     }
     if (req.query.cache) {
@@ -159,7 +143,7 @@ router.get(
         try {
           res.locals.response = await airtableLookup(
             options,
-            res.locals.authKey
+            res.locals.authKey,
           )
           respond(null, req, res, next)
         } catch (err) {
@@ -174,7 +158,7 @@ router.get(
         respond(err, req, res, next)
       }
     }
-  }
+  },
 )
 
 export default router
