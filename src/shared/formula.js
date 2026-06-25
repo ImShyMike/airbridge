@@ -18,6 +18,8 @@ const ALLOWED_FUNCTIONS = new Set([
   "VALUE",
   "ABS",
   "ROUND",
+  "LOWER",
+  "UPPER"
 ])
 
 function buildFieldMap(allowedFields) {
