@@ -2,6 +2,7 @@ import fs from "fs"
 import path from "path"
 import yaml from "js-yaml"
 import Airtable from "airtable"
+import { sanitizeFormula } from "../shared/formula.js"
 
 const AIRBRIDGE_BASE_ID = "appP3uDe6tFt7cA5r"
 const AUTHTOKENS_TABLE = "Authtokens"
@@ -18,11 +19,15 @@ function getAuthtokensTable() {
 }
 
 export async function getPermissions(authId) {
-  const sanitizedAuthId = String(authId).replace(/'/g, "\\'")
+  const authKey = String(authId)
+  const filterByFormula = sanitizeFormula(
+    `Authtoken=${JSON.stringify(authKey)}`,
+    ["Authtoken"]
+  )
   const records = await getAuthtokensTable()
     .select({
       maxRecords: 1,
-      filterByFormula: `Authtoken='${sanitizedAuthId}'`,
+      filterByFormula,
     })
     .all()
   const record = records[0]
